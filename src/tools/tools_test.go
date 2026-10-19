@@ -8,11 +8,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/Deimvis/tgrag/src/configs"
+	"github.com/Deimvis/tgrag/src/embeddings"
 	"github.com/Deimvis/tgrag/src/models"
 	"github.com/Deimvis/tgrag/src/storage"
 )
 
 func newTestRegistry(t *testing.T) *Registry {
+	t.Helper()
+	return newTestRegistryWithEmbedder(t, embeddings.New(configs.NewDefault(1, "h")))
+}
+
+func newTestRegistryWithEmbedder(t *testing.T, embedder *embeddings.Embedder) *Registry {
 	t.Helper()
 	s, err := storage.Open(filepath.Join(t.TempDir(), "test.db"))
 	require.NoError(t, err)
@@ -28,7 +35,7 @@ func newTestRegistry(t *testing.T) *Registry {
 		ChatId: 10, FirstMessageId: 1, LastMessageId: 2, FirstTs: base, LastTs: base.Add(time.Minute),
 		Participants: []string{"Lesha", "Me"}, Text: "Lesha: found an apartment\nMe: how much",
 	}}))
-	return New(s)
+	return New(s, embedder)
 }
 
 func TestCall(t *testing.T) {

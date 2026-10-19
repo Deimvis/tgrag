@@ -43,18 +43,28 @@ type Window struct {
 	Text           string    `json:"text"`
 }
 
+type SearchHitSource string
+
+const (
+	SearchHitSourceFts      SearchHitSource = "fts"
+	SearchHitSourceSemantic SearchHitSource = "semantic"
+	SearchHitSourceHybrid   SearchHitSource = "hybrid"
+)
+
 type SearchHit struct {
-	WindowId       int64     `json:"window_id"`
-	ChatId         int64     `json:"chat_id"`
-	ChatTitle      string    `json:"chat_title"`
-	FirstMessageId int64     `json:"first_message_id"`
-	LastMessageId  int64     `json:"last_message_id"`
-	FirstTs        time.Time `json:"first_ts"`
-	LastTs         time.Time `json:"last_ts"`
-	Participants   []string  `json:"participants"`
-	Snippet        string    `json:"snippet"`
-	Rank           float64   `json:"rank"`
-	Link           string    `json:"link"`
+	WindowId       int64           `json:"window_id"`
+	ChatId         int64           `json:"chat_id"`
+	ChatTitle      string          `json:"chat_title"`
+	FirstMessageId int64           `json:"first_message_id"`
+	LastMessageId  int64           `json:"last_message_id"`
+	FirstTs        time.Time       `json:"first_ts"`
+	LastTs         time.Time       `json:"last_ts"`
+	Participants   []string        `json:"participants"`
+	Snippet        string          `json:"snippet"`
+	Source         SearchHitSource `json:"source"`
+	Rank           float64         `json:"rank,omitempty"`
+	Similarity     float64         `json:"similarity,omitempty"`
+	Link           string          `json:"link"`
 }
 
 type SearchParams struct {

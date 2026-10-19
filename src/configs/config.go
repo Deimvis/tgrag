@@ -13,11 +13,12 @@ import (
 )
 
 type Config struct {
-	Telegram TelegramConfig `yaml:"telegram"`
-	Storage  StorageConfig  `yaml:"storage"`
-	Sync     SyncConfig     `yaml:"sync"`
-	Windows  WindowsConfig  `yaml:"windows"`
-	Ask      AskConfig      `yaml:"ask"`
+	Telegram   TelegramConfig   `yaml:"telegram"`
+	Storage    StorageConfig    `yaml:"storage"`
+	Sync       SyncConfig       `yaml:"sync"`
+	Windows    WindowsConfig    `yaml:"windows"`
+	Ask        AskConfig        `yaml:"ask"`
+	Embeddings EmbeddingsConfig `yaml:"embeddings"`
 }
 
 type TelegramConfig struct {
@@ -107,9 +108,37 @@ type AskConfig struct {
 	MaxIterations int    `yaml:"max_iterations" validate:"required"`
 }
 
+type EmbeddingsConfig struct {
+	IsEnabled bool   `yaml:"is_enabled"`
+	BaseUrl   string `yaml:"base_url" validate:"required_if=IsEnabled true"`
+	Model     string `yaml:"model" validate:"required_if=IsEnabled true"`
+	ApiKeyEnv string `yaml:"api_key_env"`
+	BatchSize int    `yaml:"batch_size" validate:"required_if=IsEnabled true"`
+}
+
+func (c *EmbeddingsConfig) ResolveApiKey() string {
+	if c.ApiKeyEnv == "" {
+		return ""
+	}
+	return os.Getenv(c.ApiKeyEnv)
+}
+
+func NewDefaultEmbeddingsConfig(isEnabled bool) EmbeddingsConfig {
+	return EmbeddingsConfig{
+		IsEnabled: isEnabled,
+		BaseUrl:   "http://localhost:11434/v1",
+		Model:     "bge-m3",
+		ApiKeyEnv: "",
+		BatchSize: 16,
+	}
+}
+
 func (c *Config) ValidateSelf() error {
 	if c.Sync.MaxMessagesPerChat < 0 {
 		return errors.New("sync.max_messages_per_chat must be non-negative")
+	}
+	if c.Embeddings.IsEnabled && c.Embeddings.BatchSize <= 0 {
+		return errors.New("embeddings.batch_size must be positive")
 	}
 	return nil
 }
@@ -158,8 +187,9 @@ func NewDefault(apiId int, apiHash string) Config {
 			IsSkippingChannels: true,
 			IsSkippingBots:     true,
 		},
-		Windows: WindowsConfig{GapMinutes: 20, MaxChars: 2500},
-		Ask:     AskConfig{Model: "claude-opus-5-5", MaxIterations: 20},
+		Windows:    WindowsConfig{GapMinutes: 20, MaxChars: 2500},
+		Ask:        AskConfig{Model: "claude-opus-5-5", MaxIterations: 20},
+		Embeddings: NewDefaultEmbeddingsConfig(false),
 	}
 }
 

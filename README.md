@@ -1,12 +1,12 @@
 # tgrag
 
-Local keyword search over your personal Telegram chats, usable as an agent skill (Claude Code, Codex) or as a standalone CLI.
+Local keyword and semantic search over your personal Telegram chats, usable as an agent skill (Claude Code, Codex) or as a standalone CLI.
 
 ## Tutorial
 
 1. Install: `nix run github:Deimvis/tgrag -- setup`, or `git clone https://github.com/Deimvis/tgrag && cd tgrag && make install` (puts `tgrag` into `~/.local/bin`).
 2. Setup: `tgrag setup`. It asks for Telegram app credentials (`api_id`/`api_hash` from https://my.telegram.org → API development tools; they identify the app, not you), logs you in (phone, code from the "Telegram" service chat, 2FA), lets you tick which chats to index (or the dangerous "ALL chats" option) and runs the first sync.
-3. Sync: `tgrag sync` fetches new messages of the selected chats into `~/.local/share/tgrag/tgrag.db`; run it periodically (`tgrag sync --every 4h`, or the launchd agent from the nix module). Nothing leaves your machine.
+3. Sync: `tgrag sync` fetches new messages of the selected chats into `~/.local/share/tgrag/tgrag.db`; run it periodically (`tgrag sync --every 4h`, or the launchd agent from the nix module). Nothing leaves your machine unless you point embeddings at a remote API.
 4. Install the skill and ask your agent about your chats:
     * Claude Code: `make install-skill` (copies `skill/tgrag` to `~/.claude/skills/tgrag`)
     * Codex: `make install-skill-codex` (same folder to `~/.codex/skills/tgrag`; Codex uses the same SKILL.md format)
@@ -15,15 +15,31 @@ Local keyword search over your personal Telegram chats, usable as an agent skill
 
 Allow `tgrag chats/search/context/thread/stats` in your agent's permissions to avoid prompts; keep `tgrag sync` prompting so network access stays explicit.
 
+Update later with `tgrag self update` (clones the repository, runs `go build`, replaces the running executable; needs `git` and `go`; refuses for nix-installed binaries, use nix there). `tgrag self version` prints the build revision.
+
+## Semantic search
+
+Keyword search misses paraphrases ("снял хату" vs "аренда квартиры"). Enabling embeddings adds semantic and hybrid search modes:
+
+1. Run a local embeddings server: `ollama pull bge-m3` (multilingual, good for Russian) with Ollama running, or use any OpenAI-compatible `/v1/embeddings` endpoint.
+2. Enable in `tgrag setup` (asked once) or set `embeddings.is_enabled: true` in the config.
+3. Run `tgrag embed` to embed existing windows; new windows are embedded automatically on every `tgrag sync`/`import`/`reindex`. `tgrag embed --rebuild` recomputes everything after changing `embeddings.model`.
+
+`tgrag search` then defaults to `--mode hybrid` (BM25 and cosine similarity fused by reciprocal rank); `--mode semantic` and `--mode fts` pick one side. Embeddings are stored in the same SQLite file keyed by window text hash, so re-syncing does not re-embed unchanged conversations. Similarity is computed in Go over all candidate windows (brute force), which is fine for personal-scale indexes (tens of thousands of windows).
+
+Window texts are sent to the configured endpoint: with the default local Ollama they stay on your machine, with a remote API (`base_url: https://api.openai.com/v1`, `model: text-embedding-3-small`, `api_key_env: OPENAI_API_KEY`) they do not.
+
 ## Commands
 
 All commands print JSON.
 
-* `tgrag chats [query]`, `tgrag search "<query>" [--chat <id>] [--sender <name>] [--after YYYY-MM-DD] [--before YYYY-MM-DD]`, `tgrag context --chat <id> --message <id>`, `tgrag thread --chat <id> --message <id>`, `tgrag stats`
-* query syntax: terms are ANDed, `OR` / `NOT`, trailing `*` for prefix (covers Russian word forms), `"exact phrase"`
+* `tgrag chats [query]`, `tgrag search "<query>" [--mode auto|fts|semantic|hybrid] [--chat <id>] [--sender <name>] [--after YYYY-MM-DD] [--before YYYY-MM-DD]`, `tgrag context --chat <id> --message <id>`, `tgrag thread --chat <id> --message <id>`, `tgrag stats`
+* fts query syntax: terms are ANDed, `OR` / `NOT`, trailing `*` for prefix (covers Russian word forms), `"exact phrase"`; semantic mode takes a plain sentence
+* `tgrag embed [--rebuild]` computes embeddings for windows missing them
 * `tgrag sync --chat <id|title|@username>` syncs one chat, `--full` re-downloads it (picks up edits and deletions), `--every 4h` keeps syncing
 * `tgrag import result.json` indexes a Telegram Desktop JSON export without any login
 * `tgrag reindex` rebuilds the index after changing `windows` settings in config
+* `tgrag self version`, `tgrag self update [--ref main] [--force]`
 
 ## Config
 
@@ -39,7 +55,15 @@ sync:
   is_skipping_bots: true
 windows: {gap_minutes: 20, max_chars: 2500}
 ask: {model: claude-opus-5-5, max_iterations: 20}
+embeddings:
+  is_enabled: false
+  base_url: http://localhost:11434/v1   # any OpenAI-compatible embeddings API
+  model: bge-m3
+  api_key_env: ""                       # name of env var with the api key, empty for no auth
+  batch_size: 16
 ```
+
+The `embeddings` section may be omitted while disabled.
 
 `~/.local/share/tgrag/session.json` grants full access to your Telegram account: it is `chmod 600`, never copy or commit it.
 
@@ -62,4 +86,4 @@ home-manager.users.<name>.services.tgrag = {
 ## Limits
 
 * Text only, media and voice messages are skipped
-* Keyword search only (FTS5/BM25), no embeddings yet
+* Semantic search is brute-force cosine similarity in SQLite-backed Go code, no vector index; expect around a second per query at 100k windows

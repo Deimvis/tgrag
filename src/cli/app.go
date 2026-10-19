@@ -10,6 +10,7 @@ import (
 
 	"github.com/Deimvis/tgrag/src/ask"
 	"github.com/Deimvis/tgrag/src/configs"
+	"github.com/Deimvis/tgrag/src/embeddings"
 	"github.com/Deimvis/tgrag/src/indexer"
 	"github.com/Deimvis/tgrag/src/mainfx"
 	"github.com/Deimvis/tgrag/src/tg"
@@ -22,6 +23,7 @@ func runApp(ctx context.Context, configFilePath string, invoke any) error {
 		fx.Provide(
 			configs.LoaderFactory(configFilePath),
 			mainfx.NewStorage,
+			embeddings.New,
 			indexer.New,
 			tg.New,
 			tools.New,

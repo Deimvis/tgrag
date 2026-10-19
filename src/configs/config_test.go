@@ -78,6 +78,35 @@ ask: {model: m, max_iterations: 1}
 		cfg.Telegram.ApiHashFilePath = "/x"
 		require.Error(t, Save(path, cfg))
 	})
+	t.Run("embeddings section may be omitted while disabled", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(path, []byte(`
+telegram: {api_id: 1, api_hash: h}
+storage: {data_directory_path: /data}
+sync: {chat_selection: {mode: all, chat_ids: []}, max_messages_per_chat: 0, is_skipping_channels: true, is_skipping_bots: true}
+windows: {gap_minutes: 20, max_chars: 2500}
+ask: {model: m, max_iterations: 1}
+`), 0o600))
+		act, err := Load(path)
+		require.NoError(t, err)
+		require.False(t, act.Embeddings.IsEnabled)
+	})
+	t.Run("enabled embeddings require settings", func(t *testing.T) {
+		cfg := NewDefault(1, "h")
+		cfg.Embeddings = EmbeddingsConfig{IsEnabled: true}
+		require.Error(t, Save(path, cfg))
+		cfg.Embeddings = NewDefaultEmbeddingsConfig(true)
+		require.NoError(t, Save(path, cfg))
+		act, err := Load(path)
+		require.NoError(t, err)
+		require.Equal(t, cfg.Embeddings, act.Embeddings)
+	})
+	t.Run("api key env", func(t *testing.T) {
+		cfg := NewDefaultEmbeddingsConfig(true)
+		require.Equal(t, "", cfg.ResolveApiKey())
+		cfg.ApiKeyEnv = "TGRAG_TEST_KEY"
+		t.Setenv("TGRAG_TEST_KEY", "k")
+		require.Equal(t, "k", cfg.ResolveApiKey())
+	})
 	t.Run("missing file", func(t *testing.T) {
 		_, err := Load(filepath.Join(t.TempDir(), "nope.yaml"))
 		require.Error(t, err)

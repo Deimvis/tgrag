@@ -56,11 +56,15 @@ func runSetup(ctx context.Context, configFilePath string) error {
 		return err
 	}
 	cfg.Sync.ChatSelection = selection
+	cfg.Embeddings, err = promptEmbeddings(cfg.Embeddings)
+	if err != nil {
+		return err
+	}
 	err = configs.Save(configFilePath, cfg)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "chat selection saved to %s\n", configFilePath)
+	fmt.Fprintf(os.Stderr, "settings saved to %s\n", configFilePath)
 
 	var isSyncingNow bool
 	err = huh.NewConfirm().
@@ -127,6 +131,27 @@ func ensureConfigInteractive(configFilePath string) error {
 		return err
 	}
 	return configs.Save(configFilePath, configs.NewDefault(apiId, strings.TrimSpace(apiHash)))
+}
+
+func promptEmbeddings(current configs.EmbeddingsConfig) (configs.EmbeddingsConfig, error) {
+	if current.IsEnabled {
+		return current, nil
+	}
+	var isEnabled bool
+	err := huh.NewConfirm().
+		Title("Enable semantic search (embeddings)?").
+		Description("Finds paraphrases and cross-language matches in addition to keyword search. Needs a local Ollama with the bge-m3 model (`ollama pull bge-m3`) or any OpenAI-compatible embeddings API; window texts are sent to that endpoint. Settings live under `embeddings` in the config.").
+		Affirmative("Enable (local Ollama, bge-m3)").
+		Negative("Keyword search only").
+		Value(&isEnabled).
+		Run()
+	if err != nil {
+		return current, err
+	}
+	if !isEnabled {
+		return current, nil
+	}
+	return configs.NewDefaultEmbeddingsConfig(true), nil
 }
 
 func promptChatSelection(dialogs []models.Chat, current configs.ChatSelectionConfig) (configs.ChatSelectionConfig, error) {

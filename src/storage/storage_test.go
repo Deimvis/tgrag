@@ -154,7 +154,7 @@ func TestChatsAndSync(t *testing.T) {
 	})
 	t.Run("stats", func(t *testing.T) {
 		require.NoError(t, s.RecordSyncRun(ctx, 2, 4))
-		act, err := s.Stats(ctx)
+		act, err := s.Stats(ctx, "")
 		require.NoError(t, err)
 		require.Equal(t, int64(2), act.ChatCount)
 		require.False(t, act.LatestSyncTs.IsZero())

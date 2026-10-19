@@ -17,8 +17,9 @@ import (
 )
 
 const systemPrompt = `You answer questions about the user's personal Telegram chat history using the provided tools.
-The index is keyword-based (FTS5/BM25), so search iteratively:
-* start broad, then try several phrasings, synonyms and morphological variants in both Russian and English (use prefix queries like квартир* to cover word forms);
+Search iteratively:
+* the search tool has modes: fts (keyword BM25, exact words and prefixes like квартир*), semantic (embedding similarity, finds paraphrases and cross-language matches from a natural-language query) and hybrid (both); the default auto mode picks hybrid when embeddings are enabled; if semantic/hybrid returns an "embeddings are disabled" error, use fts;
+* start broad, then try several phrasings, synonyms and morphological variants in both Russian and English (use prefix queries like квартир* to cover word forms in fts mode, plain sentences in semantic mode);
 * narrow by chat (list_chats), participant (sender) and date range when the question implies them;
 * pull get_context or get_thread around promising hits before answering, never answer from snippets alone;
 * run several searches when in doubt, do not stop after the first empty result.

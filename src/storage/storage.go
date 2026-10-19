@@ -46,9 +46,17 @@ CREATE TABLE IF NOT EXISTS windows (
 	first_ts INTEGER NOT NULL,
 	last_ts INTEGER NOT NULL,
 	participants TEXT NOT NULL,
-	text TEXT NOT NULL
+	text TEXT NOT NULL,
+	text_hash TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS windows_chat ON windows (chat_id, first_message_id);
+CREATE TABLE IF NOT EXISTS embeddings (
+	model TEXT NOT NULL,
+	text_hash TEXT NOT NULL,
+	dimension_count INTEGER NOT NULL,
+	vector BLOB NOT NULL,
+	PRIMARY KEY (model, text_hash)
+);
 CREATE VIRTUAL TABLE IF NOT EXISTS windows_fts USING fts5 (
 	text,
 	participants,
@@ -70,6 +78,10 @@ CREATE TABLE IF NOT EXISTS sync_runs (
 );
 `
 
+const schemaAfterColumnMigrations = `
+CREATE INDEX IF NOT EXISTS windows_text_hash ON windows (text_hash);
+`
+
 type Storage struct {
 	db *sql.DB
 }
@@ -84,7 +96,7 @@ func Open(path string) (*Storage, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	db.SetMaxOpenConns(1)
-	_, err = db.Exec(schema)
+	err = migrate(db)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
@@ -192,14 +204,14 @@ func (s *Storage) ReplaceWindows(ctx context.Context, chatId int64, windows []mo
 		return err
 	}
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO windows (chat_id, first_message_id, last_message_id, first_ts, last_ts, participants, text)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		INSERT INTO windows (chat_id, first_message_id, last_message_id, first_ts, last_ts, participants, text, text_hash)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for _, w := range windows {
-		_, err = stmt.ExecContext(ctx, w.ChatId, w.FirstMessageId, w.LastMessageId, toUnix(w.FirstTs), toUnix(w.LastTs), encodeParticipants(w.Participants), w.Text)
+		_, err = stmt.ExecContext(ctx, w.ChatId, w.FirstMessageId, w.LastMessageId, toUnix(w.FirstTs), toUnix(w.LastTs), encodeParticipants(w.Participants), w.Text, TextHash(w.Text))
 		if err != nil {
 			return err
 		}
@@ -300,6 +312,7 @@ func (s *Storage) Search(ctx context.Context, params models.SearchParams) ([]mod
 		h.LastTs = fromUnix(lastTs)
 		h.Participants = decodeParticipants(participants)
 		h.Link = MessageLink(models.Chat{Id: h.ChatId, Kind: models.ChatKind(kind), Username: username}, h.FirstMessageId)
+		h.Source = models.SearchHitSourceFts
 		result = append(result, h)
 	}
 	return result, rows.Err()
@@ -370,20 +383,23 @@ func (s *Storage) RecordSyncRun(ctx context.Context, syncedChatCount int, newMes
 }
 
 type Stats struct {
-	ChatCount       int64     `json:"chat_count"`
-	MessageCount    int64     `json:"message_count"`
-	WindowCount     int64     `json:"window_count"`
-	LatestSyncTs    time.Time `json:"latest_sync_ts"`
-	LatestMessageTs time.Time `json:"latest_message_ts"`
+	ChatCount           int64     `json:"chat_count"`
+	MessageCount        int64     `json:"message_count"`
+	WindowCount         int64     `json:"window_count"`
+	EmbeddedWindowCount int64     `json:"embedded_window_count"`
+	EmbeddingModel      string    `json:"embedding_model,omitempty"`
+	LatestSyncTs        time.Time `json:"latest_sync_ts"`
+	LatestMessageTs     time.Time `json:"latest_message_ts"`
 }
 
-func (s *Storage) Stats(ctx context.Context) (Stats, error) {
-	var st Stats
+func (s *Storage) Stats(ctx context.Context, embeddingModel string) (Stats, error) {
+	st := Stats{EmbeddingModel: embeddingModel}
 	var syncTs, msgTs sql.NullInt64
 	err := s.db.QueryRowContext(ctx, `
 		SELECT (SELECT COUNT(*) FROM chats), (SELECT COUNT(*) FROM messages), (SELECT COUNT(*) FROM windows),
-			(SELECT MAX(finish_ts) FROM sync_runs), (SELECT MAX(ts) FROM messages)`).
-		Scan(&st.ChatCount, &st.MessageCount, &st.WindowCount, &syncTs, &msgTs)
+			(SELECT COUNT(*) FROM windows w WHERE EXISTS (SELECT 1 FROM embeddings e WHERE e.model = ? AND e.text_hash = w.text_hash)),
+			(SELECT MAX(finish_ts) FROM sync_runs), (SELECT MAX(ts) FROM messages)`, embeddingModel).
+		Scan(&st.ChatCount, &st.MessageCount, &st.WindowCount, &st.EmbeddedWindowCount, &syncTs, &msgTs)
 	if err != nil {
 		return st, err
 	}

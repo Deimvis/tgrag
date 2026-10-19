@@ -13,8 +13,10 @@ import (
 
 	"github.com/Deimvis/tgrag/src/ask"
 	"github.com/Deimvis/tgrag/src/configs"
+	"github.com/Deimvis/tgrag/src/embeddings"
 	"github.com/Deimvis/tgrag/src/export"
 	"github.com/Deimvis/tgrag/src/indexer"
+	"github.com/Deimvis/tgrag/src/selfupdate"
 	"github.com/Deimvis/tgrag/src/storage"
 	"github.com/Deimvis/tgrag/src/tg"
 	"github.com/Deimvis/tgrag/src/tools"
@@ -35,12 +37,14 @@ func NewRootCommand() *cobra.Command {
 		newSyncCommand(&configFilePath),
 		newImportCommand(&configFilePath),
 		newReindexCommand(&configFilePath),
+		newEmbedCommand(&configFilePath),
 		newChatsCommand(&configFilePath),
 		newSearchCommand(&configFilePath),
 		newContextCommand(&configFilePath),
 		newThreadCommand(&configFilePath),
 		newStatsCommand(&configFilePath),
 		newAskCommand(&configFilePath),
+		newSelfCommand(),
 	)
 	return root
 }
@@ -205,6 +209,31 @@ func newReindexCommand(configFilePath *string) *cobra.Command {
 	}
 }
 
+func newEmbedCommand(configFilePath *string) *cobra.Command {
+	var isRebuilding bool
+	cmd := &cobra.Command{
+		Use:   "embed",
+		Short: "Compute embeddings for conversation windows that do not have them yet (needs embeddings.is_enabled in config)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runApp(cmd.Context(), *configFilePath, func(s *storage.Storage, idx *indexer.Indexer) error {
+				if isRebuilding {
+					_, err := s.PruneEmbeddings(cmd.Context(), "")
+					if err != nil {
+						return err
+					}
+				}
+				result, err := idx.EmbedAll(cmd.Context())
+				if err != nil {
+					return err
+				}
+				return printJson(result)
+			})
+		},
+	}
+	cmd.Flags().BoolVar(&isRebuilding, "rebuild", false, "drop all stored embeddings and compute them again (after changing embeddings.model)")
+	return cmd
+}
+
 func newChatsCommand(configFilePath *string) *cobra.Command {
 	var limit int
 	cmd := &cobra.Command{
@@ -227,12 +256,14 @@ func newChatsCommand(configFilePath *string) *cobra.Command {
 
 func newSearchCommand(configFilePath *string) *cobra.Command {
 	var in tools.SearchInput
+	var mode string
 	cmd := &cobra.Command{
 		Use:   "search <query>",
-		Short: "Full-text search over conversation windows (FTS5 syntax: term*, OR, NOT, \"phrase\")",
+		Short: "Search conversation windows: fts (FTS5 syntax: term*, OR, NOT, \"phrase\"), semantic (embeddings) or hybrid",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			in.Query = strings.Join(args, " ")
+			in.Mode = tools.SearchMode(mode)
 			return runApp(cmd.Context(), *configFilePath, func(r *tools.Registry) error {
 				result, err := r.Search(cmd.Context(), in)
 				if err != nil {
@@ -242,6 +273,7 @@ func newSearchCommand(configFilePath *string) *cobra.Command {
 			})
 		},
 	}
+	cmd.Flags().StringVar(&mode, "mode", string(tools.SearchModeAuto), "search mode: auto (hybrid when embeddings are enabled, else fts), fts, semantic, hybrid")
 	cmd.Flags().Int64Var(&in.ChatId, "chat", 0, "restrict to chat id")
 	cmd.Flags().StringVar(&in.Sender, "sender", "", "restrict to windows with this participant name substring")
 	cmd.Flags().StringVar(&in.After, "after", "", "only windows ending after date (YYYY-MM-DD)")
@@ -304,8 +336,8 @@ func newStatsCommand(configFilePath *string) *cobra.Command {
 		Use:   "stats",
 		Short: "Print index statistics and latest sync time",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runApp(cmd.Context(), *configFilePath, func(s *storage.Storage) error {
-				result, err := s.Stats(cmd.Context())
+			return runApp(cmd.Context(), *configFilePath, func(s *storage.Storage, embedder *embeddings.Embedder) error {
+				result, err := s.Stats(cmd.Context(), statsEmbeddingModel(embedder))
 				if err != nil {
 					return err
 				}
@@ -313,6 +345,13 @@ func newStatsCommand(configFilePath *string) *cobra.Command {
 			})
 		},
 	}
+}
+
+func statsEmbeddingModel(embedder *embeddings.Embedder) string {
+	if !embedder.IsEnabled() {
+		return ""
+	}
+	return embedder.Model()
 }
 
 func newAskCommand(configFilePath *string) *cobra.Command {
@@ -331,4 +370,42 @@ func newAskCommand(configFilePath *string) *cobra.Command {
 			})
 		},
 	}
+}
+
+func newSelfCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "self",
+		Short: "Manage the tgrag installation itself",
+	}
+	cmd.AddCommand(newSelfVersionCommand(), newSelfUpdateCommand())
+	return cmd
+}
+
+func newSelfVersionCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print build revision and executable path",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return printJson(selfupdate.CurrentVersion())
+		},
+	}
+}
+
+func newSelfUpdateCommand() *cobra.Command {
+	opts := selfupdate.Options{}
+	cmd := &cobra.Command{
+		Use:   "update",
+		Short: "Rebuild tgrag from the git repository and replace the running executable (needs git and go)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			result, err := selfupdate.Update(cmd.Context(), opts, os.Stderr)
+			if err != nil {
+				return err
+			}
+			return printJson(result)
+		},
+	}
+	cmd.Flags().StringVar(&opts.RepositoryUrl, "repository", selfupdate.DefaultRepositoryUrl, "git repository url to build from")
+	cmd.Flags().StringVar(&opts.Ref, "ref", selfupdate.DefaultRef, "branch or tag to build")
+	cmd.Flags().BoolVar(&opts.IsForced, "force", false, "rebuild even when the remote revision matches the running one")
+	return cmd
 }
