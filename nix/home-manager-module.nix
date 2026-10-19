@@ -5,13 +5,17 @@ let
   cfg = config.services.tgrag;
   package = tgragPackage pkgs;
   logFilePath = "${config.home.homeDirectory}/Library/Logs/tgrag-sync.log";
+  skillFiles = builtins.listToAttrs (map (directory: {
+    name = "${directory}/tgrag";
+    value = { source = skillDirectory; recursive = true; };
+  }) cfg.skill.directories);
 in
 {
   options.services.tgrag = {
     enable = lib.mkEnableOption "tgrag, local search over personal Telegram chats";
 
     autoSync = {
-      enable = lib.mkEnableOption "periodic `tgrag sync` launchd agent (requires a completed `tgrag login`)";
+      enable = lib.mkEnableOption "periodic `tgrag sync` launchd agent (requires a completed `tgrag setup`)";
       intervalMinutes = lib.mkOption {
         type = lib.types.ints.positive;
         default = 30;
@@ -19,16 +23,20 @@ in
       };
     };
 
-    skill.enable = lib.mkEnableOption "installing the telegram-search Claude Code skill into ~/.claude/skills (do not enable when ~/.claude/skills is managed as a whole directory elsewhere; copy ${skillDirectory} there instead)";
+    skill = {
+      enable = lib.mkEnableOption "installing the tgrag agent skill (SKILL.md) into every directory from skill.directories";
+      directories = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ".claude/skills" ".codex/skills" ];
+        description = "Skill directories of agents (relative to home), the skill is installed as <directory>/tgrag. Remove a directory when it is managed as a whole elsewhere.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
     home.packages = [ package ];
 
-    home.file.".claude/skills/telegram-search" = lib.mkIf cfg.skill.enable {
-      source = skillDirectory;
-      recursive = true;
-    };
+    home.file = lib.mkIf cfg.skill.enable skillFiles;
 
     launchd.agents.tgrag-sync = lib.mkIf cfg.autoSync.enable {
       enable = true;

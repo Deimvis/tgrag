@@ -8,9 +8,9 @@ Local keyword search over your personal Telegram chats, usable as an agent skill
 2. Setup: `tgrag setup`. It asks for Telegram app credentials (`api_id`/`api_hash` from https://my.telegram.org → API development tools; they identify the app, not you), logs you in (phone, code from the "Telegram" service chat, 2FA), lets you tick which chats to index (or the dangerous "ALL chats" option) and runs the first sync.
 3. Sync: `tgrag sync` fetches new messages of the selected chats into `~/.local/share/tgrag/tgrag.db`; run it periodically (`tgrag sync --every 4h`, or the launchd agent from the nix module). Nothing leaves your machine.
 4. Install the skill and ask your agent about your chats:
-    * Claude Code: `make install-skill` (copies `skill/telegram-search` to `~/.claude/skills/telegram-search`)
-    * Codex: `make install-skill-codex` (same folder to `~/.codex/skills/telegram-search`; Codex uses the same SKILL.md format)
-    * any other agent: paste `skill/telegram-search/SKILL.md` into its instructions file (`AGENTS.md`, system prompt); the skill only runs `tgrag` shell commands
+    * Claude Code: `make install-skill` (copies `skill/tgrag` to `~/.claude/skills/tgrag`)
+    * Codex: `make install-skill-codex` (same folder to `~/.codex/skills/tgrag`; Codex uses the same SKILL.md format)
+    * any other agent: paste `skill/tgrag/SKILL.md` into its instructions file (`AGENTS.md`, system prompt); the skill only runs `tgrag` shell commands
     * no agent at all: `ANTHROPIC_API_KEY=... tgrag ask "what did Lesha say about the apartment in spring?"`
 
 Allow `tgrag chats/search/context/thread/stats` in your agent's permissions to avoid prompts; keep `tgrag sync` prompting so network access stays explicit.
@@ -53,7 +53,7 @@ home-manager.users.<name>.imports = [ inputs.tgrag.homeManagerModules.default ];
 home-manager.users.<name>.services.tgrag = {
   enable = true;
   autoSync = { enable = true; intervalMinutes = 240; };   # launchd agent running `tgrag sync`
-  skill.enable = true;                                    # installs ~/.claude/skills/telegram-search
+  skill.enable = true;                                    # installs the skill for claude code and codex
 };
 ```
 

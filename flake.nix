@@ -29,7 +29,7 @@
         tgrag = mkPackage final;
       };
 
-      homeManagerModules.default = import ./nix/home-manager-module.nix { tgragPackage = pkgs: mkPackage pkgs; skillDirectory = ./skill/telegram-search; };
+      homeManagerModules.default = import ./nix/home-manager-module.nix { tgragPackage = pkgs: mkPackage pkgs; skillDirectory = ./skill/tgrag; };
 
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {

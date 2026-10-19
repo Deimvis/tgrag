@@ -1,9 +1,9 @@
 ---
-name: telegram-search
+name: tgrag
 description: Answer questions about the user's personal Telegram chat history (what someone said, when something was discussed, find a link/address/number someone sent). Use whenever the user asks about their Telegram conversations, chats, messages or what a specific person wrote to them.
 ---
 
-# Telegram search
+# tgrag: Telegram search
 
 All data lives locally in a SQLite index built by the `tgrag` binary. You are the reasoning loop: the index is keyword-based (FTS5/BM25), so iterate on queries instead of expecting one perfect hit.
 
