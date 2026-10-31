@@ -302,7 +302,7 @@ func (c *Client) run(ctx context.Context, authenticator auth.UserAuthenticator, 
 		Middlewares:    []telegram.Middleware{waiter},
 		NoUpdates:      true,
 		Device:         telegram.DeviceTDesktopWindows(),
-		Resolver:       telegram.TDesktopResolver(),
+		Resolver:       newTelegramResolver(),
 	})
 	return client.Run(ctx, func(ctx context.Context) error {
 		status, err := client.Auth().Status(ctx)

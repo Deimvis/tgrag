@@ -13,7 +13,7 @@
         pname = "tgrag";
         version = "0.1.0";
         src = ./.;
-        vendorHash = "sha256-NyQJ1qUAE3rN77l4FbDKK+b4rqPtdZnv4XDgYvPHDOA=";
+        vendorHash = "sha256-uALZF9GzFsbhYsQxI1MmGwTgOohfnBJT3wNbQW+j0n4=";
         subPackages = [ "cmd/tgrag" ];
         env.CGO_ENABLED = 0;
         meta.mainProgram = "tgrag";

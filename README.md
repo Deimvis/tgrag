@@ -43,6 +43,8 @@ All commands print JSON.
 
 ## Config
 
+Telegram connections respect `HTTPS_PROXY`, falling back to `HTTP_PROXY`, including their lowercase equivalents and proxy authentication. When a proxy is configured, Telegram uses its WebSocket transport through HTTP CONNECT; `NO_PROXY` / `no_proxy` bypasses the proxy for matching Telegram hosts. Without a proxy, the existing direct Telegram Desktop transport is used.
+
 `~/.config/tgrag/config.yaml`, written by `tgrag setup`:
 
 ```yaml
